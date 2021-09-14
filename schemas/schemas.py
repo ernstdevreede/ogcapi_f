@@ -90,11 +90,14 @@ class FeatureGeoJSONSchema(Schema):
     geometry = fields.Nested(GeometryGeoJSONSchema)
     properties = fields.Nested(FeaturePropertiesSchema)
     id = fields.Str(required=True)
+    storageCrs = fields.Str()
 
 class FeatureCollectionGeoJSONSchema(Schema):
     type = fields.Str(required=True, validate=OneOf(["FeatureCollection"]))
     features = fields.List(fields.Nested(FeatureGeoJSONSchema))
     links = fields.List(fields.Nested(LinkSchema))
+    crs = fields.List(fields.Str())
+    storageCrs = fields.Str()
     timestamp = fields.Str()
     numberMatched = fields.Int()
     numberReturned = fields.Int()

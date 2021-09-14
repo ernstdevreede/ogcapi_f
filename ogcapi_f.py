@@ -45,6 +45,11 @@ spec = create_apispec(
         )
 print("OK")
 
+SUPPORTED_CRS=[
+    "http://www.opengis.net/def/crs/OGC/1.3/CRS84",
+    "http://www.opengis.net/def/crs/EPSG/0/4326",
+]
+
 app = Flask(import_name=__name__)
 cors=CORS(app)
 
@@ -148,7 +153,129 @@ def multi_get(dict_obj, attrs, default=None):
         result = result[attr]
     return result
 
-def request_(url, args, name, params, url_root, headers=None, requested_id=None):
+def request_by_id(url, args, name, params, url_root, headers=None, requested_id=None):
+    url = make_wms1_3(url)+"&request=getPointValue&INFO_FORMAT=application/json"
+    print("ARGS:", args, url, headers)
+
+    if requested_id is not None:
+        # Get feature data for this id
+        print("REQUESTED_ID:", requested_id)
+        terms = requested_id.split(";")
+        layer_name = terms[0]
+        observedPropertyName = terms[1]
+        url = "%s&LAYERS=%s"%(url, observedPropertyName)
+        lon, lat = terms[2].split(",")
+        print(layer_name, observedPropertyName,lon, lat)
+        for term in terms[4:-1]:
+            print("DIM :", term)
+            dim_name, dim_value = term.split("=")
+            if dim_name.lower() == "reference_time":
+                url = "%s&DIM_REFERENCE_TIME=%s"%(url, dim_value)
+            elif dim_name.lower() == "elevation":
+                url = "%s&ELEVATION=%s"%(url, dim_value)
+            else:
+                url = "%s&DIM_%s=%s"%(url, dim_name, dim_value)
+        print("TIME:", "/".join(terms[-1].split("$")))
+
+        url = "%s&X=%s&Y=%s&CRS=EPSG:4326"%(url, lon, lat)
+        url = "%s&TIME=%s"%(url, "/".join(terms[-1].split("$")))
+        print("URL => ", url)
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            print("R:", response.content)
+            try:
+                data = json.loads(response.content.decode('utf-8'), object_pairs_hook=OrderedDict)
+            except ValueError:
+                root = fromstring(response.content.decode('utf-8'))
+                print("ET:", root)
+
+                retval =  json.dumps({"Error":  { "code": root[0].attrib["code"], "message": root[0].text}})
+                print("retval=", retval)
+                return Response(root[0].text.strip(), 400)
+            dat = data[0]
+            feature = feature_from_dat(dat, observedPropertyName, name)
+            feature["links"]=[
+                make_link("", "self", "application/geo+json", "This document"),
+                make_link("", "alternate", "text/html", "This document in html"),
+                make_link("", "collection", "application/json", "Collection")
+            ]
+        return Response(json.dumps(feature), 200, headers={'Content-Crs': "<http://www.opengis.net/def/crs/OGC/1.3/CRS84>"})
+    return Response(None, 400)
+
+def feature_from_dat(dat, name, observedPropertyName):
+    print("DAT",dat["dims"], dat)
+    dims = makedims(dat["dims"], dat["data"])
+    print("all dims:", dims)
+    timeSteps = getdimvals(dims, "time")
+    valstack=[]
+    for d in dims:
+        dim_name = list(d.keys())[0]
+        if dim_name!="time":
+            vals=getdimvals(dims, dim_name)
+            valstack.append(vals)
+            print("  DDDDDDD    ", dim_name, vals)
+    tuples = list(itertools.product(*valstack))
+    print("tuples:", tuples)
+
+    t=tuples[0]
+    print("T:", t)
+    result=[]
+    for ts in timeSteps:
+        v = multi_get(dat["data"], t+(ts,))
+        print("V:", v)
+        if v:
+            result.append(float(v))
+
+    feature_dims={}
+    i=0
+
+    layer_name=dat["name"]
+    print("\n"+layer_name+" "+dat["standard_name"]+"\n")
+    if dat["standard_name"]=="x_wind":
+        layer_name="x_"+dat["name"]
+    if dat["standard_name"]=="y_wind":
+        layer_name="y_"+dat["name"]
+
+    feature_id = "%s;%s;%s"%(observedPropertyName, dat["name"],dat["point"]["coords"])
+    for dim_value in t:
+        print("dim_value:", dim_value)
+        feature_dims[list(dims[i].keys())[0]]=dim_value
+        feature_id = feature_id + ";%s=%s"%(list(dims[i].keys())[0], dim_value)
+        i=i+1
+
+    feature_id = feature_id + ";%s$%s"%(timeSteps[0], timeSteps[-1])
+    if len(feature_dims)==0:
+        properties={
+            "timestep": timeSteps,
+            "observationType": "MeasureTimeseriesObservation",
+            "observedPropertyName": name,
+            "result": result
+        }
+    else:
+        properties={
+            "timestep": timeSteps,
+            "dims": feature_dims,
+            "observationType": "MeasureTimeseriesObservation",
+            "observedPropertyName": name,
+            "result": result
+        }
+
+    coords = dat["point"]["coords"].split(",")
+    coords[0]=float(coords[0])
+    coords[1]=float(coords[1])
+    feature = {
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates":  coords
+            },
+            "properties": properties,
+            "id": feature_id
+    }
+    return feature
+
+
+def request_(url, args, name, params, url_root, headers=None):
     url = make_wms1_3(url)+"&request=getPointValue&INFO_FORMAT=application/json"
     print("ARGS:", args, url, headers)
 
@@ -161,7 +288,7 @@ def request_(url, args, name, params, url_root, headers=None, requested_id=None)
         x=args["lonlat"].split(",")[0]
         y=args["lonlat"].split(",")[1]
         url = "%s&X=%s&Y=%s&CRS=EPSG:4326"%(url, x, y)
-    if not "CRS=" in url:
+    if not "CRS=" in url.upper():
         url = "%s&X=%s&Y=%s&CRS=EPSG:4326"%(url, 5.2, 52.0)
     if "resultTime" in args and args["resultTime"]:
         url = "%s&DIM_REFERENCE_TIME=%s"%(url, args["resultTime"])
@@ -208,78 +335,8 @@ def request_(url, args, name, params, url_root, headers=None, requested_id=None)
         numberReturned=0
         for i in range(len(data)):
             dat = data[i]
-            print("DAT",dat["dims"], dat)
-            dims = makedims(dat["dims"], dat["data"])
-            print("all dims:", dims)
-            timeSteps = getdimvals(dims, "time")
-            valstack=[]
-            for d in dims:
-                dim_name = list(d.keys())[0]
-                if dim_name!="time":
-                    vals=getdimvals(dims, dim_name)
-                    valstack.append(vals)
-                    print("  DDDDDDD    ", dim_name, vals)
-            tuples = list(itertools.product(*valstack))
-            print("tuples:", tuples)
-
-            for t in tuples:
-                result=[]
-                for ts in timeSteps:
-                    v = multi_get(dat["data"], t+(ts,))
-                    if v:
-                        result.append(float(v))
-
-                feature_dims={}
-                i=0
-
-                layer_name=dat["name"]
-                print("\n"+layer_name+" "+dat["standard_name"]+"\n")
-                if dat["standard_name"]=="x_wind":
-                    layer_name="x_"+dat["name"]
-                if dat["standard_name"]=="y_wind":
-                    layer_name="y_"+dat["name"]
-
-                feature_id = "%s;%s"%(args["observedPropertyName"], dat["name"])
-                for dim_value in t:
-                    feature_dims[list(dims[i].keys())[0]]=dim_value
-                    feature_id = feature_id + ";%s=%s"%(list(dims[i].keys())[0], dim_value)
-                    i=i+1
-
-
-
-                feature_id = feature_id + ";%s/%s"%(timeSteps[0], timeSteps[-1])
-                if len(feature_dims)==0:
-                    properties={
-                        "timestep": timeSteps,
-                        "observationType": "MeasureTimeseriesObservation",
-                        "observedPropertyName": name,
-                        "result": result
-                    }
-                else:
-                    properties={
-                        "timestep": timeSteps,
-                        "dims": feature_dims,
-                        "observationType": "MeasureTimeseriesObservation",
-                        "observedPropertyName": name,
-                        "result": result
-                    }
-
-                coords = dat["point"]["coords"].split(",")
-                coords[0]=float(coords[0])
-                coords[1]=float(coords[1])
-                feature = {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates":  coords
-                        },
-                        "properties": properties,
-                        "id": feature_id
-                }
-                if requested_id==feature_id:
-                  features.append(feature)
-                  break
-                features.append(feature)
+            feature = feature_from_dat(dat, args["observedPropertyName"], name)
+            features.append(feature)
         links=[
             make_link(url_root, "self", "application/geo+json", "This document"),
             make_link(url_root, "alternate", "text/html", "This document"),
@@ -309,7 +366,7 @@ def request_(url, args, name, params, url_root, headers=None, requested_id=None)
                 "links": links
             }
 
-        return Response(json.dumps(featurecollection), 200, mimetype="application/json")
+        return Response(json.dumps(featurecollection), 200, mimetype="application/json", headers={'Content-Crs': "<http://www.opengis.net/def/crs/OGC/1.3/CRS84>"})
     return Response("Error", 400)
 
 def get_args(request):
@@ -318,6 +375,10 @@ def get_args(request):
     request_args = request.args.copy()
     if request_args.get("bbox", None):
         args["bbox"] = request_args.pop("bbox")
+    if request_args.get("bbox-crs", None):
+        args["bbox-crs"] = request_args.pop("bbox-crs")
+    if request_args.get("crs", None):
+        args["crs"] = request_args.pop("crs")
     if request_args.get("datetime", None):
         args["datetime"] = request_args.pop("datetime", None)
     if request_args.get("resultTime", None):
@@ -409,7 +470,7 @@ def getcollection_by_name(coll):
     c = {
                 "id": collectiondata["name"],
                 "title": collectiondata["title"],
-                "extent": [0,6.2,50,54],
+                "extent": { "spatial": { "bbox": [[0,6.2,50,54]]}},
                 "description": collectiondata["name"]+" with parameters: "+param_s,
                 "links": [
                     {
@@ -436,9 +497,10 @@ def getcollection_by_name(coll):
                         "type": "text/html",
                         "title": collectiondata["title"]+" (HTML)"
                     },
-                ]
+                ],
+                "crs": ["http://www.opengis.net/def/crs/OGC/1.3/CRS84"],
+                "storageCrs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
             }
-
     return c
 
 @app.route("/collections", methods=["GET"])
@@ -455,6 +517,10 @@ def getcollections():
                   schema: ContentSchema
     """
     res={
+        "crs": [
+            "http://www.opengis.net/def/crs/OGC/1.3/CRS84",
+            "http://www.opengis.net/def/crs/EPSG/0/4326",
+        ],
         "collections":[],
         "links": [
             {
@@ -473,6 +539,7 @@ def getcollections():
     }
     for c in collections:
         res["collections"].append(getcollection_by_name(c["name"]))
+
 
     return res
 
@@ -529,10 +596,18 @@ def getcollitems(coll):
                   schema: FeatureCollectionGeoJSONSchema
     """
     args, leftover_args = get_args(request)
+    if "crs" in args and args.get("crs") not in SUPPORTED_CRS:
+        return Response("Unsupported CRS", 400)
+    if "bbox-crs" in args and args.get("bbox-crs") not in SUPPORTED_CRS:
+        return Response("Unsupported BBOX CRS", 400)
+
     if leftover_args>0:
         return Response("Too many arguments", 400)
     params = get_parameters(coll)
-    headers = {'Content-Type': 'application/json'}
+    headers = {
+        'Content-Type': 'application/json'
+    }
+
     coll_info = coll_by_name[coll]
     return request_(coll_info["service"], args, coll_info["name"], params, "collections/"+coll+"/items", headers)
 
@@ -545,35 +620,31 @@ def getcollitembyid(coll, featureid):
     ---
     get:
         description: Get collection item with id featureid
-        parameters:
-            - in: path
-              schema: CollectionParameter
-            - in: query
-              schema: LimitParameter
-            - in: query
-              schema: BboxParameter
-            - in: query
-              schema: DatetimeParameter
-            - in: query
-              schema: PhenomenonTimeParameter
-            - in: query
-              schema: LonLatParameter
-            - in: query
-              schema: ObservedPropertyNameParameter
         responses:
             200:
               description: returns items from a collection
               content:
-                application/json:
-                  schema: FeatureCollectionGeoJSONSchema
+                application/geo+json:
+                  schema: FeatureGeoJSONSchema
     """
+    print("REQUESTING FEATURE", featureid, "of", coll)
     args, leftover_args = get_args(request)
+
+    print("FEATURE ARGS:", args, leftover_args)
     if leftover_args>0:
         return Response("Too many arguments", 400)
+    if "crs" in args and args.get("crs") not in SUPPORTED_CRS:
+        return Response("Unsupported CRS", 400)
+    if "bbox-crs" in args and args.get("bbox-crs") not in SUPPORTED_CRS:
+        return Response("Unsupported BBOX CRS", 400)
+
     params = get_parameters(coll)
-    headers = {'Content-Type': 'application/json'}
+    headers = {
+        'Content-Type': 'application/geo+json',
+    }
+
     coll_info = coll_by_name[coll]
-    return request_(coll_info["service"], args, coll_info["name"], params, "collections/"+coll+"/items/"+featureid, headers)
+    return request_by_id(coll_info["service"], args, coll_info["name"], params, "collections/"+coll+"/items/"+featureid, headers, featureid)
 
 with app.test_request_context():
     spec.path(view=getcollitems)
@@ -597,7 +668,7 @@ def getconformance():
             "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/oas30",
             "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/geojson",
             "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/html",
-            # "http://www.opengis.net/spec/ogcapi-features-2/1.0/conf/crs",
+            "http://www.opengis.net/spec/ogcapi-features-2/1.0/conf/crs",
         ]
     }
     return conformance
@@ -624,7 +695,7 @@ def get_parameters(collname):
     wms = WebMapService(coll["service"], version='1.3.0')
     layers=[]
     for l in wms.contents:
-        print("l:", l, wms[l].boundingBox, wms[l].boundingBoxWGS84)
+##TODO        print("l:", l, wms[l].boundingBox, wms[l].boundingBoxWGS84)
         ls = l
         dims = get_dimensions(wms[l])
         if len(dims)>0:
