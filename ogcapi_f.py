@@ -139,7 +139,7 @@ def request_by_id(url, args, name, params, url_root, headers=None, requested_id=
         url = "%s&LAYERS=%s"%(url, observedPropertyName)
         lon, lat = terms[2].split(",")
         print(layer_name, observedPropertyName,lon, lat)
-        for term in terms[4:-1]:
+        for term in terms[3:-1]:
             print("DIM :", term)
             dim_name, dim_value = term.split("=")
             if dim_name.lower() == "reference_time":
@@ -164,7 +164,7 @@ def request_by_id(url, args, name, params, url_root, headers=None, requested_id=
 
                 retval =  json.dumps({"Error":  { "code": root[0].attrib["code"], "message": root[0].text}})
                 print("retval=", retval)
-                return Response(root[0].text.strip(), 400)
+                return 400, root[0].text.strip(), None, None
             dat = data[0]
             feature = feature_from_dat(dat, observedPropertyName, name)
             feature["links"]=[
@@ -172,8 +172,8 @@ def request_by_id(url, args, name, params, url_root, headers=None, requested_id=
                 make_link("", "alternate", "text/html", "This document in html"),
                 make_link("", "collection", "application/json", "Collection")
             ]
-        return Response(json.dumps(feature), 200, headers={'Content-Crs': "<http://www.opengis.net/def/crs/OGC/1.3/CRS84>"})
-    return Response(None, 400)
+            return 200, json.dumps(feature), {'Content-Crs': "<http://www.opengis.net/def/crs/OGC/1.3/CRS84>"}
+    return 400, None, None
 
 def feature_from_dat(dat, name, observedPropertyName):
     print("DAT",dat["dims"], dat)
@@ -275,7 +275,7 @@ def request_(url, args, name, params, url_root, headers=None):
         try:
           limit = int(args["limit"])
         except ValueError:
-          return Response("Bad value for parameter limit", 400)
+          return 400, "Bad value for parameter limit", None, None
 
     if "nextToken" in args and args["nextToken"]:
         nextToken = int(args["nextToken"])
@@ -302,7 +302,7 @@ def request_(url, args, name, params, url_root, headers=None):
 
           retval =  json.dumps({"Error":  { "code": root[0].attrib["code"], "message": root[0].text}})
           print("retval=", retval)
-          return Response(root[0].text.strip(), 400)
+          return 400, root[0].text.strip(), None, None
 
         features =[]
         numberReturned=0
@@ -339,8 +339,9 @@ def request_(url, args, name, params, url_root, headers=None):
                 "links": links
             }
 
-        return Response(json.dumps(featurecollection), 200, mimetype="application/json", headers={'Content-Crs': "<http://www.opengis.net/def/crs/OGC/1.3/CRS84>"})
-    return Response("Error", 400)
+        return 200, json.dumps(featurecollection), "application/geo+json", {'Content-Crs': "<http://www.opengis.net/def/crs/OGC/1.3/CRS84>"}
+    print("Erroring with 400")
+    return 400, "Error", None, None
 
 def get_args(request):
     args={}
@@ -447,39 +448,39 @@ def getcollection_by_name(coll):
                 param_s += "[%s:%s]"%(d["name"],",".join(d["values"]))
 
     c = {
-                "id": collectiondata["name"],
-                "title": collectiondata["title"],
-                "extent": { "spatial": { "bbox": [[0,6.2,50,54]]}},
-                "description": collectiondata["name"]+" with parameters: "+param_s,
-                "links": [
-                    {
-                        "href": request.root_url+"collections/%s"%(collectiondata["name"],),
-                        "rel": "self",
-                        "type": "application/json",
-                        "title": "Metadata of "+collectiondata["title"]
-                    },
-                    {
-                        "href": request.root_url+"collections/%s?f=html"%(collectiondata["name"],),
-                        "rel": "alternate",
-                        "type": "text/html",
-                        "title": "Metadata of "+collectiondata["title"]
-                    },
-                    {
-                        "href": request.root_url+"collections/%s/items?f=json"%(collectiondata["name"],),
-                        "rel": "items",
-                        "type": "application/geo+json",
-                        "title": collectiondata["title"]
-                    },
-                    {
-                        "href": request.root_url+"collections/%s/items?f=html"%(collectiondata["name"],),
-                        "rel": "items",
-                        "type": "text/html",
-                        "title": collectiondata["title"]+" (HTML)"
-                    },
-                ],
-                "crs": ["http://www.opengis.net/def/crs/OGC/1.3/CRS84"],
-                "storageCrs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
-            }
+            "id": collectiondata["name"],
+            "title": collectiondata["title"],
+            "extent": { "spatial": { "bbox": [[0,6.2,50,54]]}},
+            "description": collectiondata["name"]+" with parameters: "+param_s,
+            "links": [
+                {
+                    "href": request.root_url+"collections/%s"%(collectiondata["name"],),
+                    "rel": "self",
+                    "type": "application/json",
+                    "title": "Metadata of "+collectiondata["title"]
+                },
+                {
+                    "href": request.root_url+"collections/%s?f=html"%(collectiondata["name"],),
+                    "rel": "alternate",
+                    "type": "text/html",
+                    "title": "Metadata of "+collectiondata["title"]
+                },
+                {
+                    "href": request.root_url+"collections/%s/items?f=json"%(collectiondata["name"],),
+                    "rel": "items",
+                    "type": "application/geo+json",
+                    "title": collectiondata["title"]
+                },
+                {
+                    "href": request.root_url+"collections/%s/items?f=html"%(collectiondata["name"],),
+                    "rel": "items",
+                    "type": "text/html",
+                    "title": collectiondata["title"]+" (HTML)"
+                },
+            ],
+            "crs": ["http://www.opengis.net/def/crs/OGC/1.3/CRS84"],
+            "storageCrs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+        }
     return c
 
 @app.route("/collections", methods=["GET"])
@@ -539,12 +540,15 @@ def getcollection(coll):
               schema: CollectionParameter
         responses:
             200:
-              description: returns info about a collection
-              content:
-                application/json:
-                  schema: CollectionInfoSchema
+              description: retu5ctionInfoSchema
     """
-    return getcollection_by_name(coll)
+    collection = getcollection_by_name(coll)
+    print("COLL:", collection)
+    if "f" in request.args and request.args["f"]=="html":
+        response = render_template("collection.html", collection=collection)
+        return response
+
+    return collection
 
 with app.test_request_context():
     spec.path(view=getcollection)
@@ -591,7 +595,15 @@ def getcollitems(coll):
     }
 
     coll_info = coll_by_name[coll]
-    return request_(coll_info["service"], args, coll_info["name"], params, "collections/"+coll+"/items", headers)
+
+    status, featurecollection, content_type, headers = request_(coll_info["service"], args, coll_info["name"], params, "collections/"+coll+"/items", headers)
+
+    print("FC:", featurecollection, type(featurecollection))
+
+    if "f" in request.args and request.args["f"]=="html":
+        response = render_template("items.html", collection=coll_info["name"], items=json.loads(featurecollection))
+        return response
+    return Response(featurecollection, status, headers=headers)
 
 with app.test_request_context():
     spec.path(view=getcollitems)
@@ -626,7 +638,8 @@ def getcollitembyid(coll, featureid):
     }
 
     coll_info = coll_by_name[coll]
-    return request_by_id(coll_info["service"], args, coll_info["name"], params, "collections/"+coll+"/items/"+featureid, headers, featureid)
+    (status, feature, headers) =  request_by_id(coll_info["service"], args, coll_info["name"], params, "collections/"+coll+"/items/"+featureid, headers, featureid)
+    return Response(feature, status, headers=headers)
 
 with app.test_request_context():
     spec.path(view=getcollitems)
