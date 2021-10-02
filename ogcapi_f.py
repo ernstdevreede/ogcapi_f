@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, Response
+from flask import Flask, request, Response, render_template
 import json
 from flask.typing import TemplateFilterCallable
 from flask_cors import CORS
@@ -117,33 +117,6 @@ def getdimvals(dims, name):
         if list(n.keys())[0]==name:
             return list(n.values())[0]
     return None
-
-# def request_precip(args):
-#     headers = {'Content-Type': 'application/json'}
-#     url = "https://geoservices.knmi.nl/wms?DATASET=RADAR&service=WMS&version=1.3.0&request=getpointvalue&INFO_FORMAT=application/json"
-#     return request_(url, args, "precip", headers)
-
-# def request_precip_id(id):
-#     headers = {'Content-Type': 'application/json'}
-#     idterms = id.split(";")
-
-#     url = "https://geoservices.knmi.nl/wms?DATASET=RADAR&service=WMS&version=1.3.0&request=getpointvalue&INFO_FORMAT=application/json"
-#     return request_by_id(url, args, "precip", headers)
-
-# def request_harmonie(args):
-#     headers = {'Content-Type': 'application/json'}
-#     url = "https://geoservices.knmi.nl/adaguc-server?DATASET=HARM_N25&service=WMS&version=1.3.0&request=getpointvalue&INFO_FORMAT=application/json"
-#     return request_(url, args, "harmonie", headers)
-
-# def request_harmonieml(args):
-#     headers = {'Content-Type': 'application/json'}
-#     url = "https://geoservices.knmi.nl/adaguc-server?DATASET=HARM_N25_ML&service=WMS&version=1.3.0&request=getpointvalue&INFO_FORMAT=application/json"
-#     return request_(url, args, "harmonieml", headers)
-
-# def request_harmoneps(args):
-#     headers = {'Content-Type': 'application/json'}
-#     url = "https://adaguc-server-geoweb.geoweb.knmi.cloud/adaguc-server?DATASET=HARMONEPS&service=WMS&version=1.3.0&request=getpointvalue&INFO_FORMAT=application/json"
-#     return request_(url, args, "harmoneps", headers)
 
 def multi_get(dict_obj, attrs, default=None):
     result = dict_obj
@@ -429,7 +402,7 @@ def hello():
     """
     root = {
         "title": "ADAGUC OGCAPI-Features server",
-        "description": "ADAGUC OGCAPI-Features server",
+        "description": "ADAGUC OGCAPI-Features server demo",
         "links": []
     }
     root["links"].append(make_link("", "self", "application/json", "ADAGUC OGCAPI_Features server"))
@@ -437,6 +410,12 @@ def hello():
     root["links"].append(make_link("api.yaml", "service-desc", "application/vnd.oai.openapi;version=3.0", "API definition (YAML)"))
     root["links"].append(make_link("conformance", "conformance", "application/json", "OGC API Features conformance classes implemented by this server"))
     root["links"].append(make_link("collections", "data", "application/json", "Metadata about the feature collections"))
+
+    if "f" in request.args and request.args["f"]=="html":
+        print("found /f=html")
+        response = render_template("root.html", root=root)
+        print("RESP:", response)
+        return response
     return root
 
 with app.test_request_context():
@@ -461,7 +440,7 @@ def getcollection_by_name(coll):
     param_s = ""
     for p in params:
         if len(param_s)>0:
-            param_s += ','
+            param_s += ', '
         param_s += p["name"]
         if "dims" in p:
             for d in p["dims"]:
@@ -540,6 +519,9 @@ def getcollections():
     for c in collections:
         res["collections"].append(getcollection_by_name(c["name"]))
 
+    if "f" in request.args and request.args["f"]=="html":
+        response = render_template("collections.html", collections=res)
+        return response
 
     return res
 
@@ -671,6 +653,11 @@ def getconformance():
             "http://www.opengis.net/spec/ogcapi-features-2/1.0/conf/crs",
         ]
     }
+    if "f" in request.args and request.args["f"]=="html":
+        print("found /f=html")
+        response = render_template("conformance.html", title="Conformance", description="conforms to:", conformance=conformance)
+        return response
+
     return conformance
 
 with app.test_request_context():
