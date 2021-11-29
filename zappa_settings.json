@@ -1,0 +1,12 @@
+{
+    "dev": {
+        "app_function": "ogcapi_f.app",
+        "aws_region": "eu-west-1",
+        "profile_name": "knmi-rdwd-res-saml",
+        "project_name": "ogcapi_f",
+        "runtime": "python3.8",
+        "s3_bucket": "zappa-ogcapi-f",
+	"cors": true,
+	"http_methods": ["GET"]
+    }
+}

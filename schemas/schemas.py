@@ -114,11 +114,20 @@ class BboxParameter(Schema):
 class DatetimeParameter(Schema):
     datetime = fields.Str(metadata={"style": "form"})
 
+class ResultTimeParameter(Schema):
+    resultTime = fields.Str(metadata={"style": "form"})
+
 class PhenomenonTimeParameter(Schema):
     phenomenonTime = fields.Str(metadata={"style": "form"})
 
 class LonLatParameter(Schema):
     lonlat = fields.Str()
+
+class LatLonParameter(Schema):
+    latlon = fields.Str()
+
+class NPointsParameter(Schema):
+    npoints = fields.Str()
 
 class ObservedPropertyNameParameter(Schema):
       observedPropertyName = fields.Str()
