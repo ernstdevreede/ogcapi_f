@@ -24,7 +24,7 @@ from schemas.schemas import create_apispec
 
 EXTRA_SETTINGS = """
 servers:
-- url: /dev
+- url: http://192.168.178.113:5001/
   description: The OGCAPI development server
 """
 
@@ -69,13 +69,13 @@ collections = [
         "service": "https://geoservices.knmi.nl/wms?DATASET=HARM_N25",
         "extent": [-0.018500, 48.988500, 11.081500, 55.888500]
         #TODO Native projection?
-    },
-    {
-        "name": "MSG-CPP",
-        "title": "MSG-CPP",
-        "url": "/msg-cpp",
-        "service": "https://adaguc-server-msg-cpp-portal.pmc.knmi.cloud/wms?DATASET=msgrt",
-        "extent": [0, 45, 12, 57]
+    # },
+    # {
+    #     "name": "MSG-CPP",
+    #     "title": "MSG-CPP",
+    #     "url": "/msg-cpp",
+    #     "service": "https://adaguc-server-msg-cpp-portal.pmc.knmi.cloud/wms?DATASET=msgrt",
+    #     "extent": [0, 45, 12, 57]
     }
 ]
 
