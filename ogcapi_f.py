@@ -183,9 +183,11 @@ def feature_from_dat(dat, name, observedPropertyName):
     dims = makedims(dat["dims"], dat["data"])
     timeSteps = getdimvals(dims, "time")
     valstack=[]
+    dims_without_time=[]
     for d in dims:
         dim_name = list(d.keys())[0]
         if dim_name!="time":
+            dims_without_time.append(d)
             vals=getdimvals(dims, dim_name)
             valstack.append(vals)
     tuples = list(itertools.product(*valstack))
@@ -195,12 +197,11 @@ def feature_from_dat(dat, name, observedPropertyName):
         print("T:", t)
         result=[]
         for ts in timeSteps:
-            v = multi_get(dat["data"], t+(ts,))
+            v = multi_get(dat["data"], (ts,)+t)
             if v:
                 result.append(float(v))
 
         feature_dims={}
-        i=0
 
         layer_name=dat["name"]
         if dat["standard_name"]=="x_wind":
@@ -209,9 +210,10 @@ def feature_from_dat(dat, name, observedPropertyName):
             layer_name="y_"+dat["name"]
 
         feature_id = "%s;%s;%s"%(observedPropertyName, dat["name"],dat["point"]["coords"])
+        i=0
         for dim_value in t:
-            feature_dims[list(dims[i].keys())[0]]=dim_value
-            feature_id = feature_id + ";%s=%s"%(list(dims[i].keys())[0], dim_value)
+            feature_dims[list(dims_without_time[i].keys())[0]]=dim_value
+            feature_id = feature_id + ";%s=%s"%(list(dims_without_time[i].keys())[0], dim_value)
             i=i+1
 
         feature_id = feature_id + ";%s$%s"%(timeSteps[0], timeSteps[-1])
@@ -538,6 +540,19 @@ def replaceFormat(url, newFormat):
         return re.sub(r'(.*)f=([^&]*)(&.*)', r'\1&f='+newFormat+r'\3', url)
     return url+"&f="+newFormat
 
+def get_reference_times(layers, layer, last=False):
+    if "layers" in layers:
+        for l in layers["layers"]:
+            if l["name"]==layer and "dims" in l:
+                for d in l["dims"]:
+                    if d["name"]=="reference_time":
+                        if last:
+                            return d["values"][-1]
+                        else:
+                            return d["values"]
+
+    return None
+
 @app.route("/collections/<coll>/items", methods=["GET"])
 def getcollitems(coll):
     """Collection items endpoint.
@@ -601,21 +616,26 @@ def getcollitems(coll):
         args["observedPropertyName"]=[params["layers"][0]["name"]]
     print("OBS:", args["observedPropertyName"])
 
+    layers=[]
+    if not "resultTime" in args:
+        layers = get_parameters(coll)
+
     for parameter_name in args["observedPropertyName"]:
         param_args = {**args}
         param_args["observedPropertyName"]=parameter_name
+        if not "resultTime" in param_args:
+            latest_reference_time = get_reference_times(layers, parameter_name, True)
+            if latest_reference_time:
+                param_args["resultTime"]=latest_reference_time
         if "lonlat" in param_args or "latlon" in param_args:
             print("single")
             status, coordfeatures = request_(coll_info["service"], param_args, coll_info["name"], headers)
             features.extend(coordfeatures)
         else:
-            print("coords: ", coords)
             for c in coords: #get_coords(coords, int(args["nextToken"]), int(args["limit"])):
                 param_args["lonlat"] = "%f,%f"%(c[0], c[1])
-                print("ARGS", param_args["lonlat"])
                 status, coordfeatures = request_(coll_info["service"], param_args, coll_info["name"], headers)
                 features.extend(coordfeatures)
-                print("\n<*******>\n", len(features))
 
     if "f" in request.args and request.args["f"]=="html":
         links=[
@@ -714,10 +734,10 @@ with app.test_request_context():
 def make_wms1_3(serv):
     return serv+"&service=WMS&version=1.3.0"
 
-def get_dimensions(l):
+def get_dimensions(l, skip_dims=[]):
     dims=[]
     for s in l.dimensions:
-        if s != "time" and s != "reference_time":
+        if not s in skip_dims:
             dim={"name": s, "values": l.dimensions[s]["values"]}
             dims.append(dim)
     return dims
@@ -729,9 +749,9 @@ def get_parameters(collname):
     layers=[]
     for l in wms.contents:
         ls = l
-        dims = get_dimensions(wms[l])
+        dims = get_dimensions(wms[l], ["time"])
         if len(dims)>0:
-          layer = { "name": ls, "dims": get_dimensions(wms[l])}
+          layer = { "name": ls, "dims": dims}
         else:
           layer = { "name": ls}
         layers.append(layer)
