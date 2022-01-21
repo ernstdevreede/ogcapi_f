@@ -22,6 +22,9 @@ from owslib.wms import WebMapService
 import yaml
 from schemas.schemas import create_apispec
 
+
+TIMEOUT=20
+
 EXTRA_SETTINGS = """
 servers:
 - url: http://192.168.178.113:5001/
@@ -156,7 +159,7 @@ def request_by_id(url, name, headers=None, requested_id=None):
 
         url = "%s&X=%s&Y=%s&CRS=EPSG:4326"%(url, lon, lat)
         url = "%s&TIME=%s"%(url, "/".join(terms[-1].split("$")))
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=TIMEOUT)
         if response.status_code == 200:
             print("R:", response.content)
             try:
@@ -283,7 +286,7 @@ def request_(url, args, name, headers=None):
                 url = "%s&DIM_%s=%s"%(url, dimname, dimval)
 
     print("URL:", url)
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, timeout=TIMEOUT)
     if response.status_code == 200:
         try:
             response_data = json.loads(response.content.decode('utf-8'), object_pairs_hook=OrderedDict)
