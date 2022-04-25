@@ -27,7 +27,7 @@ TIMEOUT=20
 
 EXTRA_SETTINGS = """
 servers:
-- url: http://192.168.178.113:5001/
+- url: https://52.16.158.161/
   description: The OGCAPI development server
 """
 
@@ -346,12 +346,12 @@ def make_link(pth, rel, typ, title):
     link = {
         "rel": rel,
         "type": typ,
-        "title": title
+        "title": title,
     }
     if pth.startswith("http"):
-        link["href"] = pth
+        link["href"] = pth.replace("http:", "https:")
     else:
-        link["href"] = request.root_url + pth
+        link["href"] = request.root_url.replace("http:", "https:") + pth
     return link
 
 @app.route("/", methods=['GET'])
@@ -418,25 +418,25 @@ def getcollection_by_name(coll):
             "description": collectiondata["name"]+" with parameters: "+param_s,
             "links": [
                 {
-                    "href": request.root_url+"collections/%s"%(collectiondata["name"],),
+                    "href": request.root_url.replace("http:", "https:")+"collections/%s"%(collectiondata["name"],),
                     "rel": "self",
                     "type": "application/json",
                     "title": "Metadata of "+collectiondata["title"]
                 },
                 {
-                    "href": request.root_url+"collections/%s?f=html"%(collectiondata["name"],),
+                    "href": request.root_url.replace("http:", "https:")+"collections/%s?f=html"%(collectiondata["name"],),
                     "rel": "alternate",
                     "type": "text/html",
                     "title": "Metadata of "+collectiondata["title"]
                 },
                 {
-                    "href": request.root_url+"collections/%s/items?f=json"%(collectiondata["name"],),
+                    "href": request.root_url.replace("http:", "https:")+"collections/%s/items?f=json"%(collectiondata["name"],),
                     "rel": "items",
                     "type": "application/geo+json",
                     "title": collectiondata["title"]
                 },
                 {
-                    "href": request.root_url+"collections/%s/items?f=html"%(collectiondata["name"],),
+                    "href": request.root_url.replace("http:", "https:")+"collections/%s/items?f=html"%(collectiondata["name"],),
                     "rel": "items",
                     "type": "text/html",
                     "title": collectiondata["title"]+" (HTML)"
@@ -468,13 +468,13 @@ def getcollections():
         "collections":[],
         "links": [
             {
-                "href": request.root_url+"collections",
+                "href": request.root_url.replace("http:", "https:")+"collections",
                 "rel": "self",
                 "type": "application/json",
                 "title": "Metadata about the feature collections"
             },
                     {
-                "href": request.root_url+"collections?f=html",
+                "href": request.root_url.replace("http:", "https:")+"collections?f=html",
                 "rel": "alternate",
                 "type": "text/html",
                 "title": "Metadata about the feature collections"
